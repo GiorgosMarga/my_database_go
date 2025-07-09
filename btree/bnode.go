@@ -3,6 +3,7 @@ package btree
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 )
 
 type BNode []byte
@@ -25,6 +26,7 @@ const (
 // HEADER | PTRS 		| OFFSETS 		| KV Pairs
 // 4b       nkeys * 8n    nkeys * 2b      2b + 2b + (k+v)b
 func (n BNode) setHeader(nodeType uint16, nkeys uint16) {
+	fmt.Println("Setting with", nkeys)
 	binary.LittleEndian.PutUint16(n[0:], nodeType)
 	binary.LittleEndian.PutUint16(n[2:], nkeys)
 }
@@ -59,6 +61,7 @@ func (n BNode) getOffset(idx uint16) uint16 {
 
 func (n BNode) getKVPos(idx uint16) uint16 {
 	pos := HEADER_SIZE + PTRS_SIZE*n.getKeys() + OFFSET_SIZE*n.getKeys()
+	fmt.Println(pos, n.getKeys())
 	// each offeset tells us where
 	// each idx ends, so idx 0 shows where idx 0 ends which means where idx 1 should start
 	if idx > 0 {
@@ -68,6 +71,7 @@ func (n BNode) getKVPos(idx uint16) uint16 {
 }
 
 func (n BNode) getKey(idx uint16) []byte {
+	fmt.Println("Getting key for ", idx)
 	pos := n.getKVPos(idx)
 
 	klen := binary.LittleEndian.Uint16(n[pos:])

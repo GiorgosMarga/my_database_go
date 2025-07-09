@@ -18,6 +18,33 @@ type Btree struct {
 	Del  func(uint64)
 }
 
+func (t *Btree) GetValue(k []byte) ([]byte, error) {
+	if t.Root == 0 {
+		return nil, fmt.Errorf("empty tree")
+	}
+
+	val := t.getValue(t.Get(t.Root), k)
+	if len(val) == 0 {
+		return val, fmt.Errorf("key doesnt exist")
+	}
+	return val, nil
+}
+
+func (t *Btree) getValue(node BNode, k []byte) []byte {
+	ptr := node.findKey(k)
+
+	switch node.getType() {
+	case BNODE_LEAF:
+		if !bytes.Equal(node.getKey(ptr), k) {
+			return []byte{} // key doesnt exist
+		}
+		return node.getVal(ptr)
+	case BNODE_INTERNAL:
+		childNode := node.getPtr(ptr)
+		return t.getValue(t.Get(childNode), k)
+	}
+	panic("invalid key")
+}
 func (t *Btree) Insert(k, v []byte) error {
 	if len(k) > BTREE_MAX_KEY_SIZE {
 		return errors.New("key is too big")
