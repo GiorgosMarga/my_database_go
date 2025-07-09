@@ -55,11 +55,11 @@ func (t *Btree) Insert(k, v []byte) error {
 	}
 
 	if t.Root == 0 {
-		New := make(BNode, BNODE_PAGE_SIZE)
-		New.setHeader(BNODE_LEAF, 2)
-		New.appendKV(0, 0, nil, nil)
-		New.appendKV(1, 0, k, v)
-		t.Root = t.New(New)
+		new := make(BNode, BNODE_PAGE_SIZE)
+		new.setHeader(BNODE_LEAF, 2)
+		new.appendKV(0, 0, nil, nil)
+		new.appendKV(1, 0, k, v)
+		t.Root = t.New(new)
 		return nil
 	}
 
@@ -84,15 +84,14 @@ func (t *Btree) Insert(k, v []byte) error {
 
 func (t *Btree) insertNode(node BNode, k, v []byte) BNode {
 	idx := node.findKey(k)
-	fmt.Println(idx)
-	New := make(BNode, 2*BNODE_PAGE_SIZE)
+	new := make(BNode, 2*BNODE_PAGE_SIZE)
 
 	switch node.getType() {
 	case BNODE_LEAF:
 		if bytes.Equal(node.getKey(idx), k) {
-			leafUpdate(node, New, idx, k, v)
+			leafUpdate(node, new, idx, k, v)
 		} else {
-			leafInsert(node, New, idx+1, k, v)
+			leafInsert(node, new, idx+1, k, v)
 		}
 	case BNODE_INTERNAL:
 		childPtr := node.getPtr(idx)
@@ -102,15 +101,15 @@ func (t *Btree) insertNode(node BNode, k, v []byte) BNode {
 		nsplit, splitted := splitNode(updated)
 
 		if nsplit > 1 {
-			copynKV(node, 0, New, 0, idx)
+			copynKV(node, 0, new, 0, idx)
 			for i, newSplitted := range splitted {
-				New.appendKV(idx+uint16(i), t.New(newSplitted), newSplitted.getKey(0), nil)
+				new.appendKV(idx+uint16(i), t.New(newSplitted), newSplitted.getKey(0), nil)
 			}
-			copynKV(node, idx+1, New, idx+nsplit, node.getKeys()-idx-1)
+			copynKV(node, idx+1, new, idx+nsplit, node.getKeys()-idx-1)
 		}
 
 	}
-	return New
+	return new
 }
 
 func (t *Btree) Delete(k []byte) (bool, error) {

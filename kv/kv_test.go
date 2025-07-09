@@ -25,7 +25,7 @@ func TestInsert(t *testing.T) {
 	if !bytes.Equal(v, val) {
 		log.Fatalf("get: wrong value, expected: %s got %s\n", string(v), string(val))
 	}
-	// if err := kv.Set(k, v); err != nil {
-	// 	log.Fatal(err)
-	// }
+	if err := kv.Set(k, v); err != nil {
+		log.Fatal(err)
+	}
 }
