@@ -34,3 +34,7 @@ func (n LNode) getPtr(idx uint64) uint64 {
 	pos := NEXT_PTR_SIZE + idx*PTR_SIZE
 	return binary.LittleEndian.Uint64(n[pos:])
 }
+func (n LNode) SetNext(ptr uint64) {
+	binary.LittleEndian.PutUint64(n[0:], ptr)
+
+}

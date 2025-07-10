@@ -54,18 +54,27 @@ func TestPtrs(t *testing.T) {
 
 }
 
-func TestLeafUpdate(t *testing.T) {
+func TestLeafInsert(t *testing.T) {
 
 	old := make(BNode, BNODE_PAGE_SIZE)
-	old.setHeader(BNODE_LEAF, 2)
-
-	for i := range 2 {
-		old.appendKV(uint16(i), 0, fmt.Appendf(nil, "%d", i), fmt.Appendf(nil, "%d", i))
+	numOfKeys := 8
+	old.setHeader(BNODE_LEAF, uint16(numOfKeys)+1)
+	old.appendKV(0, 0, nil, nil)
+	for i := range numOfKeys {
+		old.appendKV(uint16(i)+1, 0, fmt.Appendf(nil, "k_%d", i), fmt.Appendf(nil, "k_%d", i))
 	}
+
+	for i := range old.getKeys() {
+		fmt.Printf("%s ", old.getKey(i))
+	}
+	fmt.Println()
 
 	new := make(BNode, BNODE_PAGE_SIZE)
 
-	leafInsert(old, new, 1, fmt.Appendf(nil, "updated_%d", 3), fmt.Appendf(nil, "updated_%d", 3))
+	idx := old.findKey(fmt.Appendf(nil, "k_%d", 9))
+	fmt.Println(bytes.Compare([]byte("k_8"), []byte("k_9")))
+	fmt.Println("Inserting: ", idx)
+	leafInsert(old, new, idx+1, fmt.Appendf(nil, "inserted_%d", 3), fmt.Appendf(nil, "inserted_%d", 3))
 
 	fmt.Println("New has", new.getKeys(), "keys")
 	for i := range new.getKeys() {

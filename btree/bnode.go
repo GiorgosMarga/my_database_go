@@ -99,6 +99,7 @@ func (n BNode) appendKV(idx uint16, ptr uint64, k, v []byte) {
 
 }
 
+// TODO: binary search
 func (n BNode) findKey(k []byte) uint16 {
 	var i uint16 = 0
 
@@ -112,7 +113,7 @@ func (n BNode) findKey(k []byte) uint16 {
 			return i - 1
 		}
 	}
-	return i - 1
+	return i
 }
 
 func copynKV(src BNode, srcIdx uint16, dst BNode, dstIdx uint16, n uint16) {
@@ -145,7 +146,7 @@ func (n BNode) getBytes() uint16 {
 func splitNodeTo2(node BNode, newLeft, newRight BNode) {
 	idx := node.getKeys() / 2
 
-	// get KVPos gives us the bytes neede up to idx
+	// get KVPos gives us the bytes needed up to idx
 	for node.getKVPos(idx) > BNODE_PAGE_SIZE {
 		idx--
 	}
@@ -164,7 +165,7 @@ func splitNodeTo2(node BNode, newLeft, newRight BNode) {
 func splitNode(node BNode) (uint16, [3]BNode) {
 
 	if node.getBytes() <= BNODE_PAGE_SIZE {
-		return 0, [3]BNode{node[:BNODE_PAGE_SIZE]} // no split
+		return 1, [3]BNode{node[:BNODE_PAGE_SIZE]} // no split
 	}
 
 	left := make(BNode, 2*BNODE_PAGE_SIZE) // 2 * because it might need to be split again
@@ -185,7 +186,7 @@ func splitNode(node BNode) (uint16, [3]BNode) {
 }
 
 func replace2Ptrs(new, old BNode, newPtr uint64, idx uint16, key []byte) {
-	new.setHeader(old.getType(), old.getKeys())
+	new.setHeader(old.getType(), old.getKeys()-1)
 
 	copynKV(old, 0, new, 0, idx)
 	new.appendKV(idx, newPtr, key, nil)

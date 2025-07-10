@@ -68,12 +68,14 @@ func (t *Btree) Insert(k, v []byte) error {
 	nsplit, splitted := splitNode(node)
 
 	t.Del(t.Root)
-	if nsplit == 0 {
+	if nsplit == 1 {
 		t.Root = t.New(splitted[0])
 	} else {
 		newRoot := make(BNode, BNODE_PAGE_SIZE)
 		newRoot.setHeader(BNODE_INTERNAL, nsplit)
-		for i, newSplitted := range splitted {
+		for i := range nsplit {
+			newSplitted := splitted[i]
+
 			newRoot.appendKV(uint16(i), t.New(newSplitted), newSplitted.getKey(0), nil)
 		}
 		t.Root = t.New(newRoot)
@@ -84,6 +86,7 @@ func (t *Btree) Insert(k, v []byte) error {
 
 func (t *Btree) insertNode(node BNode, k, v []byte) BNode {
 	idx := node.findKey(k)
+
 	new := make(BNode, 2*BNODE_PAGE_SIZE)
 
 	switch node.getType() {
@@ -94,50 +97,49 @@ func (t *Btree) insertNode(node BNode, k, v []byte) BNode {
 			leafInsert(node, new, idx+1, k, v)
 		}
 	case BNODE_INTERNAL:
+
 		childPtr := node.getPtr(idx)
 		updated := t.insertNode(t.Get(childPtr), k, v)
 		t.Del(childPtr)
 
 		nsplit, splitted := splitNode(updated)
-
-		if nsplit > 1 {
-			copynKV(node, 0, new, 0, idx)
-			for i, newSplitted := range splitted {
-				new.appendKV(idx+uint16(i), t.New(newSplitted), newSplitted.getKey(0), nil)
-			}
-			copynKV(node, idx+1, new, idx+nsplit, node.getKeys()-idx-1)
+		new.setHeader(BNODE_INTERNAL, node.getKeys()+nsplit-1)
+		copynKV(node, 0, new, 0, idx)
+		for i, newSplitted := range splitted[:nsplit] {
+			new.appendKV(idx+uint16(i), t.New(newSplitted), newSplitted.getKey(0), nil)
 		}
+		copynKV(node, idx+1, new, idx+nsplit, node.getKeys()-idx-1)
 
 	}
 	return new
 }
 
-func (t *Btree) Delete(k []byte) (bool, error) {
+func (t *Btree) Delete(k []byte) error {
 	if t.Root == 0 {
-		return false, nil
+		return fmt.Errorf("key not found")
 	}
 
 	newRoot := t.deleteNode(t.Get(t.Root), k)
 
 	t.Del(t.Root)
 	t.Root = t.New(newRoot)
-	return true, nil
+	return nil
 }
 
 func (t *Btree) deleteNode(node BNode, k []byte) BNode {
 
 	idx := node.findKey(k)
 
-	New := make(BNode, BNODE_PAGE_SIZE)
+	new := make(BNode, BNODE_PAGE_SIZE)
 
 	switch node.getType() {
 	case BNODE_LEAF:
 		if !bytes.Equal(k, node.getKey(idx)) {
 			return BNode{} // not exists
 		}
-		New.setHeader(BNODE_LEAF, node.getKeys()-1)
-		copynKV(node, 0, New, 0, idx)
-		copynKV(node, idx+1, New, idx, node.getKeys()-idx-1)
+		new.setHeader(BNODE_LEAF, node.getKeys()-1)
+		copynKV(node, 0, new, 0, idx)
+		copynKV(node, idx+1, new, idx, node.getKeys()-idx-1)
 	case BNODE_INTERNAL:
 		childPtr := node.getPtr(idx)
 		child := t.deleteNode(t.Get(childPtr), k) // contains the updated node (keys is removed if exists)
@@ -149,33 +151,32 @@ func (t *Btree) deleteNode(node BNode, k []byte) BNode {
 			merged := make(BNode, BNODE_PAGE_SIZE)
 			merge2Nodes(sibling, child, merged)
 			t.Del(node.getPtr(idx - 1))
-			replace2Ptrs(New, node, t.New(merged), idx-1, merged.getKey(0))
-		case mergeDirection == 1: // merge with left sibling
+			replace2Ptrs(new, node, t.New(merged), idx-1, merged.getKey(0))
+		case mergeDirection == 1: // merge with right sibling
 			merged := make(BNode, BNODE_PAGE_SIZE)
 			merge2Nodes(child, sibling, merged)
-			t.Del(node.getPtr(idx))
-			replace2Ptrs(New, node, t.New(merged), idx, merged.getKey(0))
+			t.Del(node.getPtr(idx + 1))
+			replace2Ptrs(new, node, t.New(merged), idx, merged.getKey(0))
 		case mergeDirection == 0 && child.getKeys() == 0:
-			New.setHeader(BNODE_INTERNAL, 0)
+			new.setHeader(BNODE_INTERNAL, 0)
 		case mergeDirection == 0 && child.getKeys() > 0:
-			New.setHeader(BNODE_INTERNAL, node.getKeys())
-			copynKV(node, 0, New, 0, idx)
-			New.appendKV(idx, t.New(child), child.getKey(0), nil)
-			copynKV(node, idx+1, New, idx+1, node.getKeys()-idx-1)
+			new.setHeader(BNODE_INTERNAL, node.getKeys())
+			copynKV(node, 0, new, 0, idx)
+			new.appendKV(idx, t.New(child), child.getKey(0), nil)
+			copynKV(node, idx+1, new, idx+1, node.getKeys()-idx-1)
 		}
 
 		t.Del(childPtr)
 
 	}
-	return New
+	return new
 }
 
 func (t *Btree) shouldMerge(parent, updated BNode, idx uint16) (int, BNode) {
-	if updated.getBytes() < BNODE_PAGE_SIZE/4 {
+	if updated.getBytes() > BNODE_PAGE_SIZE/4 {
 		return 0, BNode{}
 	}
-
-	if idx-1 > 0 {
+	if int(idx)-1 > 0 {
 		leftSibling := BNode(t.Get(parent.getPtr(idx - 1)))
 		if leftSibling.getBytes()+updated.getBytes() <= BNODE_PAGE_SIZE {
 			return -1, leftSibling

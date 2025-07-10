@@ -1,6 +1,10 @@
 package freelist
 
-import "github.com/GiorgosMarga/my_db/btree"
+import (
+	"fmt"
+
+	"github.com/GiorgosMarga/my_db/btree"
+)
 
 type FreeList struct {
 	Get    func(uint64) []byte
@@ -12,6 +16,8 @@ type FreeList struct {
 
 	TailPage uint64
 	TailIdx  uint64
+
+	MaxIdx uint64
 }
 
 func (fl *FreeList) getIdx(idx uint64) uint64 {
@@ -26,14 +32,18 @@ func (fl *FreeList) PopHead() uint64 {
 	return ptr
 }
 func (fl *FreeList) pop() (uint64, uint64) {
-	if fl.HeadIdx == fl.TailIdx {
+	if fl.HeadIdx == fl.MaxIdx {
 		return 0, 0
 	}
 	next := LNode(fl.Get(fl.HeadPage)).getNext()
 	ptr := LNode(fl.Get(fl.HeadPage)).getPtr(fl.getIdx(fl.HeadIdx))
+
 	fl.HeadIdx++
 
 	if fl.getIdx(fl.HeadIdx) == 0 {
+		if next == 0 {
+			panic("asda")
+		}
 		// this head page has no more available ptrs
 		head := fl.HeadPage
 		fl.HeadPage = next
@@ -43,8 +53,8 @@ func (fl *FreeList) pop() (uint64, uint64) {
 }
 
 func (fl *FreeList) PushTail(ptr uint64) {
-	tailNode := LNode(fl.Update(fl.TailPage))
-	tailNode.setPtr(fl.getIdx(fl.TailIdx), ptr)
+	LNode(fl.Update(fl.TailPage)).setPtr(fl.getIdx(fl.TailIdx), ptr)
+
 	fl.TailIdx++
 	if fl.getIdx(fl.TailIdx) != 0 {
 		// tail node has available space for more ptrs
@@ -53,7 +63,6 @@ func (fl *FreeList) PushTail(ptr uint64) {
 	// recycle head page if exists or create a new page
 
 	next, head := fl.pop()
-
 	if next == 0 {
 		// allocate new page
 		next = fl.New(make([]byte, btree.BNODE_PAGE_SIZE))
@@ -63,8 +72,13 @@ func (fl *FreeList) PushTail(ptr uint64) {
 	fl.TailPage = next
 	// also add the head node if it's removed
 	if head != 0 {
+		fmt.Println("head was removed")
 		LNode(fl.Update(fl.TailPage)).setPtr(0, head)
 		fl.TailIdx++
 	}
 
+}
+
+func (fl *FreeList) SetMaxIdx() {
+	fl.MaxIdx = fl.TailIdx
 }

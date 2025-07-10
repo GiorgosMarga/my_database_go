@@ -38,7 +38,7 @@ type KV struct {
 func (kv *KV) Init(filename string) error {
 	kv.filename = filename
 	if err := kv.createFileSync(filename); err != nil {
-		return nil
+		return err
 	}
 
 	stat, err := os.Stat(kv.filename)
@@ -82,18 +82,20 @@ func (kv *KV) Init(filename string) error {
 func (kv *KV) pageUpdate(ptr uint64) []byte {
 
 	if node, ok := kv.pages.updated[ptr]; ok {
-		return node
+		return node // pending update
 	}
 
 	newNode := make([]byte, btree.BNODE_PAGE_SIZE)
 	copy(newNode, kv.readPageFromFile(ptr))
+	kv.pages.updated[ptr] = newNode // initialized from file
 	return newNode
 }
 
 func (kv *KV) pageAlloc(data []byte) uint64 {
 	ptr := kv.freelist.PopHead()
 	if ptr != 0 {
-		fmt.Println("Reusing ptr:", ptr)
+		// kv.pages.nappend++
+		kv.pages.updated[ptr] = data
 		return ptr
 	}
 	return kv.appendPage(data)
@@ -134,7 +136,7 @@ func (kv *KV) createFileSync(filename string) error {
 
 }
 
-func (kv *KV) Set(k, v []byte) error {
+func (kv *KV) Insert(k, v []byte) error {
 	prevMeta := kv.createMeta()
 	if err := kv.tree.Insert(k, v); err != nil {
 		return err // invalid k or v length
@@ -145,6 +147,10 @@ func (kv *KV) Set(k, v []byte) error {
 
 func (kv *KV) Get(k []byte) ([]byte, error) {
 	return kv.tree.GetValue(k)
+}
+
+func (kv *KV) Delete(k []byte) error {
+	return kv.tree.Delete(k)
 }
 func (kv *KV) loadMeta(meta []byte) {
 
@@ -161,6 +167,8 @@ func (kv *KV) loadMeta(meta []byte) {
 
 	kv.freelist.TailPage = binary.LittleEndian.Uint64(meta[48:])
 	kv.freelist.TailIdx = binary.LittleEndian.Uint64(meta[56:])
+
+	kv.freelist.SetMaxIdx()
 }
 
 func (kv *KV) createMeta() []byte {
@@ -255,7 +263,11 @@ func (kv *KV) updateFile() error {
 		return err
 	}
 
-	return syscall.Fsync(kv.fd)
+	if err := syscall.Fsync(kv.fd); err != nil {
+		return err
+	}
+	kv.freelist.SetMaxIdx()
+	return nil
 }
 
 func (kv *KV) updateRoot() error {
@@ -279,8 +291,8 @@ func (kv *KV) updateOrRevert(meta []byte) error {
 func (kv *KV) readRoot(filesize int) error {
 	if filesize == 0 {
 		kv.pages.flushed = 2 // meta + freelist dummy page
-		kv.freelist.HeadIdx = 1
-		kv.freelist.TailIdx = 1
+		kv.freelist.HeadPage = 1
+		kv.freelist.TailPage = 1
 		kv.freelist.HeadIdx = 0
 		kv.freelist.TailIdx = 0
 		return nil
